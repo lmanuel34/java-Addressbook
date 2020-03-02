@@ -1,0 +1,604 @@
+import java.io.*;
+import java.util.ArrayList;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.util.Scanner;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+
+class EmptyNameException extends RuntimeException {
+    public EmptyNameException() {
+        super("Neither the first name nor the last name in newContact can be null or empty");
+    }
+}
+
+class DuplicateContactException extends Exception {
+    public DuplicateContactException(){
+        super("The method should notify the user if a contact with the " +
+                "same first name and last name is already in the address book");
+    }
+}
+
+class ContactNotFoundException extends Exception {}
+
+/* implements Serializable-Now its objects can be converted into stream.
+Serialization in Java is a mechanism of writing the state of an object into a byte-stream
+Serializable is a marker interface (has no data member and method). It is used to "mark" Java classes so that the objects of these classes may get a certain capability.
+The Cloneable and Remote are also marker interfaces.
+It must be implemented by the class whose object you want to persist.
+The String class and all the wrapper classes implement the java.io.Serializable interface by default.
+
+Serialization refers to the translation of java object state into byte
+to send it over the network or store it in hard d. We need serialization because the hard disketwork
+infrastructure are hardware component and we cannot send java objects because it understands just bytes and not java objects.
+ */
+/** OVERVIEW: This class provides helper variables for OO to AddressBook . */
+class Contact implements java.io.Serializable {
+    public String firstName;
+    public String lastName;
+    public String phone;
+    public String email;
+
+    public Contact(){}
+
+    public Contact(String first, String last){
+        this.firstName = first;
+        this.lastName = last;
+    }
+
+    public Contact(Contact c){
+        this.firstName = c.firstName;
+        this.lastName = c.lastName;
+        this.email = c.email;
+        this.phone = c.phone;
+    }
+
+}
+
+/** OVERVIEW: This class provides a number of
+ standalone procedures that are useful for
+ manipulating arrays List for contacts. */
+class AddressBook {
+    private final String CONTACT_FILE_NAME = "contacts.dat";
+    private ArrayList<Contact> contacts;
+
+    /** EFFECTS: if any disk I/O error occurs throwsIOException).
+     */
+    public  AddressBook() throws IOException {
+        //on creating a new book, read from the file
+        this.readContacts();
+    }
+
+    /** EFFECTS: loop through the size of the arrayList and check for contact if there return i else return -1*/
+    private int findContact(String firstName, String lastName){
+        for (int i = 0; i < contacts.size(); i++){
+            Contact c = contacts.get(i);
+            // check the firstname and lastname of c
+            //return c's index i if it matches
+            if(c.firstName.equalsIgnoreCase(firstName) && c.lastName.equalsIgnoreCase(lastName)){
+                return i;
+            }
+        }
+        //return -1 if didnt find these names
+        return -1;
+    }
+    /**
+     * OVERVIEW: This reads to file
+     * REQUIRES: none
+     * MODIFIES:  binary file contacts.dat
+     * EFFECTS: this method call will write to the file
+     */
+    private void readContacts() throws IOException{
+        File tempDir = new File(CONTACT_FILE_NAME);
+        //check if file exist
+        boolean exists = tempDir.exists();
+        //if exist try to read
+        if(exists){
+            try(FileInputStream fIn = new FileInputStream(CONTACT_FILE_NAME);
+                ObjectInputStream oIs = new ObjectInputStream(fIn)){
+                //pull a binary arraylist of contacts out of the file
+                contacts = (ArrayList<Contact>) oIs.readObject();
+            } catch (ClassNotFoundException e) {
+                throw  new IOException("Class not found when reading file");
+            }
+        }
+        //if theres no file we just need to create an empty store
+        else {
+            contacts = new ArrayList<Contact>();
+        }
+    }
+    /**
+     * OVERVIEW: This writes to file
+     * REQUIRES: none
+     * MODIFIES:  binary file contacts.dat
+     * EFFECTS: this method call will write to the file
+     */
+    private  void writeContacts() throws  IOException {
+        // open object stream
+        try(FileOutputStream fout = new FileOutputStream(CONTACT_FILE_NAME);
+            ObjectOutputStream oOs = new ObjectOutputStream(fout))
+        {
+            //write a binary arraylist of contacts object to the file
+            oOs.writeObject(contacts);
+        }
+    }
+    /**
+     * OVERVIEW: This Adds a name to the list
+     * REQUIRES: Name is not NULL
+     * MODIFIES:  binary file contacts.dat
+     * EFFECTS: If first or last name is null, throws
+     NullPointerException and EmptyNameException.If same name, throws DuplicateContactException.
+     if any disk I/O error occurs throwsIOException
+     */
+    public void addContact(Contact newContact) throws NullPointerException, EmptyNameException,
+            DuplicateContactException, IOException {
+        if(newContact.firstName==null || newContact.lastName == null) {
+            throw new NullPointerException();
+        }
+        //check for empty strings in names
+        if(newContact.firstName.equals("") || newContact.lastName.equals("")) {
+            throw new EmptyNameException();
+        }
+        //checking if name already exist.
+        if(findContact(newContact.firstName,newContact.lastName) != -1){
+            throw new DuplicateContactException();
+        }
+        //make a copy of the contact to store in arraylist
+        Contact localNewContact = new Contact(newContact);
+        contacts.add(localNewContact);
+        //try to write updated contact list to file
+        try{
+            this.writeContacts();
+        }
+        catch (IOException e){
+            contacts.remove(localNewContact);
+            throw e;
+        }
+    }
+
+    /**
+     * OVERVIEW: This removes a name to the list
+     * REQUIRES: Name is not NULL
+     * MODIFIES:  binary file contacts.dat
+     * EFFECTS: If first or last name is null, throws
+     NullPointerException and ContactNotFoundException.
+     if any disk I/O error occurs throwsIOException
+     */
+    public void deleteContact(String firstName, String lastName) throws NullPointerException,
+            ContactNotFoundException, IOException{
+        if(firstName==null || lastName == null) {
+            throw new NullPointerException();
+        }
+        //check for empty strings in names
+        if(firstName.equals("") || lastName.equals("")) {
+            throw new EmptyNameException();
+        }
+        //get the index of contact
+        int index = findContact(firstName,lastName);
+        //if not found throw exception
+        if (index == -1) {
+            throw new ContactNotFoundException();
+        }
+        //remove contact and write change to file
+        Contact removed = contacts.remove(index);
+        try {
+            this.writeContacts();
+        }
+        catch (IOException e) {
+            contacts.add(index,removed);
+            throw  new IOException();
+        }
+    }
+    /**
+     * OVERVIEW: This Searches for Last Name
+     * REQUIRES: Name is not NULL
+     * MODIFIES:  none
+     * EFFECTS: If last name is null, throws
+     NullPointerException and EmptyNameException.else return list
+     */
+    public Contact[] searchByLastName(String lastName) throws NullPointerException {
+        if (lastName == null) {
+            throw new NullPointerException();
+        }
+        if (lastName.equals("")) {
+            throw new EmptyNameException();
+        }
+        //this loop finds the number of contacts returning
+        //for each contact in  list, check the last name
+        int count = 0;
+        for (Contact c : contacts) {
+            if (c.lastName.equalsIgnoreCase(lastName)) {
+                count++;
+            }
+        }
+        //using  count create correctly sized array to return
+        Contact[] list = new Contact[count];
+        //in this loop populate  array with contacts that matched
+        int i = 0;
+        for (Contact c : contacts) {
+            if (c.lastName.equalsIgnoreCase(lastName)) {
+                list[i] = new Contact(c);
+                i++;
+            }
+        }
+        return list;
+    }
+    /**
+     * OVERVIEW: This return all items in list
+     * REQUIRES: none
+     * MODIFIES:  none
+     * EFFECTS: loop through list and return the array
+     */
+    public Contact[] list (){
+        //create new array sized for the whole store of contacts
+        Contact[] array = new Contact[contacts.size()];
+        //populate the new array with copies of the contacts store
+        for(int i=0; i<contacts.size();i++){
+            array[i]= new Contact(contacts.get(i));
+        }
+        return array;
+    }
+    /**
+     * OVERVIEW: This takes the first letter and returns a matching item in list
+     * REQUIRES: Name is not NULL
+     * MODIFIES:  none
+     * EFFECTS: If  last name is null, throws
+     NullPointerException and EmptyNameException. this loops through list and returns match
+     */
+    public  Contact[] searchByLastNamePartial(String partialLastName) throws NullPointerException{
+        //check for null pointers in our partial string
+        if(partialLastName == null){
+            throw new NullPointerException();
+        }
+        //check for empty strings in our partial string
+        if(partialLastName.equals("")){
+            throw new EmptyNameException();
+        }
+        //this loop finds the number of contacts returning
+        //for each contact, check the last name against partial
+        //string using teh contains method
+        int count = 0;
+        for(Contact  c : contacts){
+            if(c.lastName.toLowerCase().contains(partialLastName.toLowerCase())){
+                count++;
+            }
+        }
+        //using  count create correctly sized array to return
+        Contact[] list = new Contact[count];
+        //in this loop we will populate array with contacts that partially
+        // match string using contains
+        int i = 0;
+        for(Contact c : contacts){
+            if(c.lastName.toLowerCase().contains(partialLastName.toLowerCase())){
+                list[i] = new Contact(c);
+            }
+        }
+        return  list;
+    }
+}
+
+
+/* OVERVIEW: A program that provides user with an interface
+to use an AddressBook
+*/
+public class Main {
+    public static void main(String[] args) {
+        AddressBook book = null;
+
+        // try to open the address book
+        try {
+            book = new AddressBook();
+        } catch (IOException e) {
+            System.out.println(e);
+            System.out.println("Unable to read from the contact file. Program stops");
+            return;
+        }
+
+        String firstName, lastName, email, phone;
+
+        int instruction = -1;
+        var in = new Scanner(System.in);
+        Contact[] result = null;
+
+        Method m = null;
+
+        do {
+            System.out.println();
+            System.out.println("******************************************************");
+            System.out.println("Please select one of the following instructions (0-4):");
+            System.out.println("  0. Exit");
+            System.out.println("  1. Add a new contact");
+            System.out.println("  2. Delete a contact");
+            System.out.println("  3. Search for contacts using a last name");
+            System.out.println("  33. Search for contacts using a partial last name");
+            System.out.println("  4. List all contacts");
+            System.out.println("******************************************************");
+            System.out.println();
+
+            String line = in.nextLine();
+            try {
+                instruction = Integer.parseInt(line);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid instruction!");
+                continue;
+            }
+
+            switch (instruction) {
+                case 0:
+                    break;
+                case 1:
+                    try {
+                        m = AddressBook.class.getMethod(
+                                "addContact", Contact.class);
+                    }
+                    catch (NoSuchMethodException e) {
+                        System.out.println("addContact not implement in "
+                                + "AddressBook!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    System.out.println("Please enter the first name of the contact: ");
+                    firstName = in.nextLine();
+                    if (firstName.isBlank()) {
+                        System.out.println("First name cannot be empty!");
+                        continue;
+                    }
+                    System.out.println();
+                    System.out.println("Please enter the last name of the contact: ");
+                    lastName = in.nextLine();
+                    if (lastName.isBlank()) {
+                        System.out.println("Last name cannot be empty!");
+                        continue;
+                    }
+                    System.out.println();
+                    System.out.println("Please enter the email address of the contact: ");
+                    email = in.nextLine();
+                    System.out.println();
+                    System.out.println("Please enter the phone number of the contact: ");
+                    phone = in.nextLine();
+
+                    var c = new Contact();
+                    c.firstName = firstName;
+                    c.lastName = lastName;
+                    c.email = email;
+                    c.phone = phone;
+
+                    System.out.println();
+                    try {
+                        try {
+                            m.invoke(book, c);
+                        } catch (IllegalAccessException | IllegalArgumentException e) {
+                            System.out.println(e);
+                            System.out.println("Invocation Error: addContact");
+                        }
+                        catch (InvocationTargetException e) {
+                            Throwable th = e.getCause();
+                            if (th instanceof NullPointerException)
+                                throw (NullPointerException) th;
+                            else if (th instanceof EmptyNameException)
+                                throw (EmptyNameException) th;
+                            else if (th instanceof DuplicateContactException)
+                                throw (DuplicateContactException) th;
+                            else if (th instanceof IOException)
+                                throw (IOException) th;
+                            else {
+                                System.out.println(e);
+                                System.out.println("Invocation Error: addContact");
+                            }
+                        }
+                        //book.addContact(c);
+                    } catch (IOException e) {
+                        System.out.println(e);
+                        System.out.println("Unable to write to disk!  New contact is not added.");
+                        continue;
+                    } catch (DuplicateContactException e) {
+                        System.out.println("Contact exists!  New contact is not added.");
+                        continue;
+                    }
+
+                    System.out.println("New contact is added successfully.");
+
+                    break;
+                case 2:
+                    try {
+                        m = AddressBook.class.getMethod(
+                                "deleteContact", String.class, String.class);
+                    }
+                    catch (NoSuchMethodException e) {
+                        System.out.println("deleteContact not implement in "
+                                + "AddressBook!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    System.out.println("Please enter the first name of the contact to delete: ");
+                    firstName = in.nextLine();
+                    if (firstName.isBlank()) {
+                        System.out.println("First name cannot be empty!");
+                        continue;
+                    }
+                    System.out.println();
+                    System.out.println("Please enter the last name of the contact to delete: ");
+                    lastName = in.nextLine();
+                    if (lastName.isBlank()) {
+                        System.out.println("Last name cannot be empty!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    try {
+                        try {
+                            m.invoke(book, firstName, lastName);
+                        } catch (IllegalAccessException | IllegalArgumentException e) {
+                            System.out.println(e);
+                            System.out.println("Invocation Error: deleteContact");
+                        }
+                        catch (InvocationTargetException e) {
+                            Throwable th = e.getCause();
+                            if (th instanceof NullPointerException)
+                                throw (NullPointerException) th;
+                            else if (th instanceof EmptyNameException)
+                                throw (EmptyNameException) th;
+                            else if (th instanceof ContactNotFoundException)
+                                throw (ContactNotFoundException) th;
+                            else if (th instanceof IOException)
+                                throw (IOException) th;
+                            else {
+                                System.out.println(e);
+                                System.out.println("Invocation Error: deleteContact");
+                            }
+                        }
+                        //book.deleteContact(firstName, lastName);
+                    } catch (IOException e) {
+                        System.out.println(e);
+                        System.out.println("Unable to write to disk!  Contact is not deleted");
+                        continue;
+                    } catch (ContactNotFoundException e) {
+                        System.out.println("Contact does not exist!  Contact is not deleted");
+                        continue;
+                    }
+
+                    System.out.println("Contact is deleted successfully");
+
+                    break;
+                case 3:
+                    try {
+                        m = AddressBook.class.getMethod(
+                                "searchByLastName", String.class);
+                    }
+                    catch (NoSuchMethodException e) {
+                        System.out.println("searchByLastName not implement in "
+                                + "AddressBook!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    System.out.println("Please enter the last name to search: ");
+                    lastName = in.nextLine();
+                    if (lastName.isBlank()) {
+                        System.out.println("Last name cannot be empty!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    try {
+                        result = (Contact[]) m.invoke(book, lastName);
+                    } catch (IllegalAccessException | IllegalArgumentException e) {
+                        System.out.println(e);
+                        System.out.println("Invocation Error: searchByLastName");
+                    }
+                    catch (InvocationTargetException e) {
+                        Throwable th = e.getCause();
+                        if (th instanceof NullPointerException)
+                            throw (NullPointerException) th;
+                        else if (th instanceof EmptyNameException)
+                            throw (EmptyNameException) th;
+                        else {
+                            System.out.println(e);
+                            System.out.println("Invocation Error: searchByLastName");
+                        }
+                    }
+                    //result = book.searchByLastName(lastName);
+                    if (result.length == 0)
+                        System.out.println("There is no contact with the given last name.");
+                    else {
+                        for (var curContact : result) {
+                            System.out.println(curContact.firstName + " " + curContact.lastName);
+                            System.out.println("E-mail: " + curContact.email);
+                            System.out.println("Phone: " + curContact.phone);
+                            System.out.println();
+                        }
+                    }
+
+                    break;
+                case 33:
+                    try {
+                        m = AddressBook.class.getMethod(
+                                "searchByLastNamePartial", String.class);
+                    }
+                    catch (NoSuchMethodException e) {
+                        System.out.println("searchByLastNamePartial not implement in "
+                                + "AddressBook!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    System.out.println("Please enter the partial lastname to search: ");
+                    lastName = in.nextLine();
+                    if (lastName.isBlank()) {
+                        System.out.println("Lastname cannot be empty!");
+                        continue;
+                    }
+                    System.out.println();
+                    try {
+                        result = (Contact[]) m.invoke(book, lastName);
+                    }
+                    catch (IllegalAccessException | IllegalArgumentException e) {
+                        System.out.println(e);
+                        System.out.println("Invocation Error: searchByLastNamePartial");
+                    }
+                    catch (InvocationTargetException e) {
+                        Throwable th = e.getCause();
+                        if (th instanceof NullPointerException)
+                            throw (NullPointerException) th;
+                        else if (th instanceof EmptyNameException)
+                            throw (EmptyNameException) th;
+                        else {
+                            System.out.println(e);
+                            System.out.println("Invocation Error: searchByLastNamePartial");
+                        }
+                    }
+                    //result = book.searchByLastNamePartial(lastName);
+
+                    if (result.length == 0)
+                        System.out.println("There is no contact with the given partial "
+                                + "last name.");
+                    else {
+                        for (var curContact : result) {
+                            System.out.println(curContact.firstName + " " + curContact.lastName);
+                            System.out.println("E-mail: " + curContact.email);
+                            System.out.println("Phone: " + curContact.phone);
+                            System.out.println();
+                        }
+                    }
+
+                    break;
+                case 4:
+                    try {
+                        m = AddressBook.class.getMethod("list");
+                    }
+                    catch (NoSuchMethodException e) {
+                        System.out.println("list not implement in AddressBook!");
+                        continue;
+                    }
+
+                    System.out.println();
+                    try {
+                        result = (Contact[]) m.invoke(book);
+                    } catch (IllegalAccessException | IllegalArgumentException |
+                            InvocationTargetException e) {
+                        System.out.println(e);
+                        System.out.println("Invocation Error: list");
+                    }
+                    //result = book.list();
+                    if (result.length == 0)
+                        System.out.println("There is no contact in the address book.");
+                    else
+                        for (var curContact : result) {
+                            System.out.println(curContact.firstName + " " +
+                                    curContact.lastName);
+                            System.out.println("E-mail: " + curContact.email);
+                            System.out.println("Phone: " + curContact.phone);
+                            System.out.println();
+                        }
+
+                    break;
+                default:
+                    System.out.println("Invalid instruction!");
+            }
+        } while (instruction != 0);
+    }
+}
